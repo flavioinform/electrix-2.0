@@ -6,7 +6,7 @@ import { HousingUnitRow } from '../components/HousingUnitRow';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Label } from '../components/Label';
-import { Plus, Search, Building, FolderOpen, Home, Key, UserPlus } from 'lucide-react';
+import { Search, Building, FolderOpen, Home, Key, UserPlus, Pencil, Trash2, X, Check } from 'lucide-react';
 import { formatRut } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -31,11 +31,21 @@ export default function Workflow() {
     const [newClientType, setNewClientType] = useState('Constructora');
     const [showAddClient, setShowAddClient] = useState(false);
 
+    // Edit Client State
+    const [isEditingClient, setIsEditingClient] = useState(false);
+    const [editClientName, setEditClientName] = useState('');
+    const [editClientRut, setEditClientRut] = useState('');
+    const [editClientType, setEditClientType] = useState('');
+
     const [newProjectName, setNewProjectName] = useState('');
     const [showAddProject, setShowAddProject] = useState(false);
 
     const [newUnitName, setNewUnitName] = useState('');
     const [showAddUnit, setShowAddUnit] = useState(false);
+
+    // Edit Project State
+    const [isEditingProject, setIsEditingProject] = useState(false);
+    const [editProjectName, setEditProjectName] = useState('');
 
     // Constants
     const CLIENT_TYPES = ["Constructora", "Particular", "Empresa", "Otro"];
@@ -90,7 +100,7 @@ export default function Workflow() {
         e.preventDefault();
         if (!newClientName) return;
 
-        const { data, error } = await supabase.from('clients').insert({
+        const { data } = await supabase.from('clients').insert({
             name: newClientName,
             type: newClientType,
             rut: newClientRut || null,
@@ -106,11 +116,34 @@ export default function Workflow() {
         }
     };
 
+    const handleUpdateClient = async () => {
+        if (!editClientName || !selectedClientId) return;
+
+        const { error } = await supabase
+            .from('clients')
+            .update({
+                name: editClientName,
+                rut: editClientRut || null,
+                type: editClientType
+            })
+            .eq('id', selectedClientId);
+
+        if (!error) {
+            setClients(clients.map(c => c.id === selectedClientId ? {
+                ...c,
+                name: editClientName,
+                rut: editClientRut,
+                type: editClientType
+            } : c));
+            setIsEditingClient(false);
+        }
+    };
+
     const handleCreateProject = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newProjectName || !selectedClientId) return;
 
-        const { data, error } = await supabase.from('projects').insert({
+        const { data } = await supabase.from('projects').insert({
             client_id: selectedClientId,
             name: newProjectName,
             status: 'En curso'
@@ -128,7 +161,7 @@ export default function Workflow() {
         e.preventDefault();
         if (!newUnitName || !selectedProjectId) return;
 
-        const { data, error } = await supabase.from('housing_units').insert({
+        const { data } = await supabase.from('housing_units').insert({
             project_id: selectedProjectId,
             name: newUnitName,
             status: {}
@@ -138,6 +171,40 @@ export default function Workflow() {
             setHousingUnits([...housingUnits, data]); // Append to end usually
             setNewUnitName('');
             setShowAddUnit(false);
+        }
+    };
+
+    const handleUpdateProject = async () => {
+        if (!editProjectName || !selectedProjectId) return;
+
+        const { error } = await supabase
+            .from('projects')
+            .update({ name: editProjectName })
+            .eq('id', selectedProjectId);
+
+        if (!error) {
+            setProjects(projects.map(p => p.id === selectedProjectId ? { ...p, name: editProjectName } : p));
+            setIsEditingProject(false);
+        }
+    };
+
+    const handleDeleteProject = async () => {
+        if (!selectedProjectId) return;
+
+        if (!window.confirm("¿Estás seguro de que quieres eliminar este proyecto? Esta acción no se puede deshacer y borrará todas las unidades asociadas.")) {
+            return;
+        }
+
+        const { error } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', selectedProjectId);
+
+        if (!error) {
+            setProjects(projects.filter(p => p.id !== selectedProjectId));
+            setSelectedProjectId('');
+            setHousingUnits([]);
+            setIsEditingProject(false);
         }
     };
 
@@ -175,7 +242,7 @@ export default function Workflow() {
             const email = `${cleanRut}@electrix.com`;
 
             // 3. Sign Up
-            const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+            const { error: authError } = await tempSupabase.auth.signUp({
                 email,
                 password: credentialPassword,
                 options: {
@@ -247,21 +314,80 @@ export default function Workflow() {
                     <div className="relative flex-1">
                         <Label>Seleccionar Cliente</Label>
                         <div className="relative">
-                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                            <select
-                                className="flex h-12 w-full rounded-md border border-input bg-card px-10 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                value={selectedClientId}
-                                onChange={e => setSelectedClientId(e.target.value)}
-                            >
-                                <option value="">Seleccionar Cliente...</option>
-                                {clients.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name} ({c.type}) {c.rut ? `- ${c.rut}` : ''}</option>
-                                ))}
-                            </select>
+                            {isEditingClient ? (
+                                <div className="flex items-center gap-2 animate-in fade-in flex-wrap bg-card border border-border p-2 rounded-md">
+                                    <div className="flex-1 min-w-[200px]">
+                                        <Input
+                                            value={editClientName}
+                                            onChange={e => setEditClientName(e.target.value)}
+                                            placeholder="Nombre"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-[150px]">
+                                        <Input
+                                            value={editClientRut}
+                                            onChange={e => setEditClientRut(formatRut(e.target.value))}
+                                            placeholder="RUT"
+                                            maxLength={12}
+                                        />
+                                    </div>
+                                    <div className="w-40">
+                                        <select
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                            value={editClientType}
+                                            onChange={e => setEditClientType(e.target.value)}
+                                        >
+                                            {CLIENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    <Button size="sm" onClick={handleUpdateClient} className="bg-green-600 hover:bg-green-700">
+                                        <Check className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" onClick={() => setIsEditingClient(false)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                        <select
+                                            className="flex h-12 w-full rounded-md border border-input bg-card px-10 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            value={selectedClientId}
+                                            onChange={e => setSelectedClientId(e.target.value)}
+                                        >
+                                            <option value="">Seleccionar Cliente...</option>
+                                            {clients.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name} ({c.type}) {c.rut ? `- ${c.rut}` : ''}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {selectedClientId && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-12 w-12 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                            onClick={() => {
+                                                const client = clients.find(c => c.id === selectedClientId);
+                                                if (client) {
+                                                    setEditClientName(client.name);
+                                                    setEditClientRut(client.rut || '');
+                                                    setEditClientType(client.type);
+                                                    setIsEditingClient(true);
+                                                }
+                                            }}
+                                            title="Editar cliente"
+                                        >
+                                            <Pencil className="h-5 w-5" />
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    {selectedClientId && profile?.role === 'supervisor' && (
+                    {selectedClientId && !isEditingClient && profile?.role === 'supervisor' && (
                         <Button
                             className="h-12 gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80"
                             onClick={() => setShowCredentialsModal(true)}
@@ -344,17 +470,65 @@ export default function Workflow() {
                         </form>
                     )}
 
-                    <div className="relative">
-                        <select
-                            className="flex h-12 w-full rounded-md border border-input bg-card px-4 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            value={selectedProjectId}
-                            onChange={e => setSelectedProjectId(e.target.value)}
-                        >
-                            <option value="">Seleccionar Proyecto...</option>
-                            {projects.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                        </select>
+                    <div className="relative flex items-center gap-2">
+                        {isEditingProject ? (
+                            <div className="flex-1 flex items-center gap-2 animate-in fade-in">
+                                <Input
+                                    value={editProjectName}
+                                    onChange={e => setEditProjectName(e.target.value)}
+                                    autoFocus
+                                    className="h-10"
+                                />
+                                <Button size="sm" onClick={handleUpdateProject} className="h-10 w-10 p-0 bg-green-600 hover:bg-green-700">
+                                    <Check className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setIsEditingProject(false)} className="h-10 w-10 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        ) : (
+                            <>
+                                <select
+                                    className="flex h-12 w-full rounded-md border border-input bg-card px-4 py-2 text-base ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    value={selectedProjectId}
+                                    onChange={e => setSelectedProjectId(e.target.value)}
+                                >
+                                    <option value="">Seleccionar Proyecto...</option>
+                                    {projects.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+
+                                {selectedProjectId && (
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-12 w-12 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                            onClick={() => {
+                                                const proj = projects.find(p => p.id === selectedProjectId);
+                                                if (proj) {
+                                                    setEditProjectName(proj.name);
+                                                    setIsEditingProject(true);
+                                                }
+                                            }}
+                                            title="Editar nombre del proyecto"
+                                        >
+                                            <Pencil className="h-5 w-5" />
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-12 w-12 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                            onClick={handleDeleteProject}
+                                            title="Eliminar proyecto"
+                                        >
+                                            <Trash2 className="h-5 w-5" />
+                                        </Button>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 </section>
             )}

@@ -4,7 +4,7 @@ import type { AppTransaction } from '../types';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Label } from '../components/Label';
-import { Plus, Search, Calendar, DollarSign, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { Plus, DollarSign, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 
@@ -18,8 +18,10 @@ export default function CashFlow() {
     const [income, setIncome] = useState(0);
     const [expense, setExpense] = useState(0);
 
+    const [editingId, setEditingId] = useState<string | null>(null);
+
     // New Transaction Form
-    const [newTrans, setNewTrans] = useState({
+    const [formData, setFormData] = useState({
         type: 'gasto', // default for workers mostly
         amount: '',
         category: 'Materiales',
@@ -55,26 +57,99 @@ export default function CashFlow() {
         setExpense(exp);
     };
 
-    const handleAddTransaction = async (e: React.FormEvent) => {
+    const handleSaveTransaction = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newTrans.amount || !newTrans.description) return;
+        if (!formData.amount || !formData.description) return;
 
-        const { data, error } = await supabase.from('transactions').insert({
-            type: newTrans.type,
-            amount: parseFloat(newTrans.amount),
-            category: newTrans.category,
-            description: newTrans.description,
-            date: newTrans.date,
-            created_by: profile?.id
-        }).select().single();
+        if (editingId) {
+            // Update existing
+            const { error } = await supabase
+                .from('transactions')
+                .update({
+                    type: formData.type,
+                    amount: parseFloat(formData.amount),
+                    category: formData.category,
+                    description: formData.description,
+                    date: formData.date
+                })
+                .eq('id', editingId);
 
-        if (data) {
-            const updated = [data, ...transactions];
+            if (error) {
+                alert('Error al actualizar: ' + error.message);
+            } else {
+                const updatedTrans: AppTransaction = {
+                    ...transactions.find(t => t.id === editingId)!,
+                    ...formData,
+                    amount: parseFloat(formData.amount),
+                    type: formData.type as 'gasto' | 'ingreso'
+                };
+
+                const updatedList = transactions.map(t => t.id === editingId ? updatedTrans : t);
+                setTransactions(updatedList);
+                calculateTotals(updatedList);
+                closeModal();
+            }
+        } else {
+            // Create new
+            const { data, error } = await supabase.from('transactions').insert({
+                type: formData.type,
+                amount: parseFloat(formData.amount),
+                category: formData.category,
+                description: formData.description,
+                date: formData.date,
+                created_by: profile?.id
+            }).select().single();
+
+            if (data) {
+                // Cast type to satisfy AppTransaction strict union
+                const castedData = {
+                    ...data,
+                    type: data.type as 'gasto' | 'ingreso'
+                };
+                const updated = [castedData, ...transactions];
+                setTransactions(updated);
+                calculateTotals(updated);
+                closeModal();
+            }
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('¿Estás seguro de eliminar esta transacción?')) return;
+
+        const { error } = await supabase.from('transactions').delete().eq('id', id);
+
+        if (error) {
+            alert('Error al eliminar: ' + error.message);
+        } else {
+            const updated = transactions.filter(t => t.id !== id);
             setTransactions(updated);
             calculateTotals(updated);
-            setShowAddModal(false);
-            setNewTrans({ ...newTrans, amount: '', description: '' });
         }
+    };
+
+    const handleEdit = (transaction: AppTransaction) => {
+        setEditingId(transaction.id);
+        setFormData({
+            type: transaction.type,
+            amount: transaction.amount.toString(),
+            category: transaction.category,
+            description: transaction.description,
+            date: transaction.date.split('T')[0]
+        });
+        setShowAddModal(true);
+    };
+
+    const closeModal = () => {
+        setShowAddModal(false);
+        setEditingId(null);
+        setFormData({
+            type: 'gasto',
+            amount: '',
+            category: 'Materiales',
+            description: '',
+            date: new Date().toISOString().split('T')[0],
+        });
     };
 
     const formatCurrency = (amount: number) => {
@@ -93,7 +168,7 @@ export default function CashFlow() {
                     </h1>
                     <p className="text-muted-foreground text-sm">Gestiona los ingresos y gastos de la empresa.</p>
                 </div>
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold" onClick={() => setShowAddModal(true)}>
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold" onClick={() => { setEditingId(null); setShowAddModal(true); }}>
                     <Plus className="h-4 w-4 mr-2" /> Nueva transacción
                 </Button>
             </div>
@@ -126,15 +201,15 @@ export default function CashFlow() {
             {showAddModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in">
                     <div className="bg-card w-full max-w-lg rounded-xl border border-border p-6 shadow-2xl space-y-4">
-                        <h3 className="text-lg font-bold">Nueva transacción</h3>
-                        <form onSubmit={handleAddTransaction} className="space-y-4">
+                        <h3 className="text-lg font-bold">{editingId ? 'Editar transacción' : 'Nueva transacción'}</h3>
+                        <form onSubmit={handleSaveTransaction} className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <Label>Tipo</Label>
                                     <select
                                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                        value={newTrans.type}
-                                        onChange={e => setNewTrans({ ...newTrans, type: e.target.value })}
+                                        value={formData.type}
+                                        onChange={e => setFormData({ ...formData, type: e.target.value })}
                                     >
                                         <option value="gasto">Gasto</option>
                                         <option value="ingreso">Ingreso</option>
@@ -144,8 +219,8 @@ export default function CashFlow() {
                                     <Label>Monto</Label>
                                     <Input
                                         type="number"
-                                        value={newTrans.amount}
-                                        onChange={e => setNewTrans({ ...newTrans, amount: e.target.value })}
+                                        value={formData.amount}
+                                        onChange={e => setFormData({ ...formData, amount: e.target.value })}
                                         placeholder="10000"
                                         required
                                     />
@@ -155,8 +230,8 @@ export default function CashFlow() {
                                 <Label>Categoría</Label>
                                 <select
                                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                    value={newTrans.category}
-                                    onChange={e => setNewTrans({ ...newTrans, category: e.target.value })}
+                                    value={formData.category}
+                                    onChange={e => setFormData({ ...formData, category: e.target.value })}
                                 >
                                     <option value="Materiales">Materiales</option>
                                     <option value="Servicios">Servicios</option>
@@ -168,8 +243,8 @@ export default function CashFlow() {
                             <div>
                                 <Label>Descripción</Label>
                                 <Input
-                                    value={newTrans.description}
-                                    onChange={e => setNewTrans({ ...newTrans, description: e.target.value })}
+                                    value={formData.description}
+                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
                                     placeholder="Detalle de la transacción"
                                     required
                                 />
@@ -178,13 +253,13 @@ export default function CashFlow() {
                                 <Label>Fecha</Label>
                                 <Input
                                     type="date"
-                                    value={newTrans.date}
-                                    onChange={e => setNewTrans({ ...newTrans, date: e.target.value })}
+                                    value={formData.date}
+                                    onChange={e => setFormData({ ...formData, date: e.target.value })}
                                 />
                             </div>
                             <div className="flex justify-end gap-2 pt-4">
-                                <Button type="button" variant="ghost" onClick={() => setShowAddModal(false)}>Cancelar</Button>
-                                <Button type="submit">Guardar</Button>
+                                <Button type="button" variant="ghost" onClick={closeModal}>Cancelar</Button>
+                                <Button type="submit">{editingId ? 'Actualizar' : 'Guardar'}</Button>
                             </div>
                         </form>
                     </div>
@@ -202,6 +277,7 @@ export default function CashFlow() {
                                 <th className="px-6 py-3">Categoría</th>
                                 <th className="px-6 py-3">Descripción</th>
                                 <th className="px-6 py-3 text-right">Monto</th>
+                                <th className="px-6 py-3 w-[100px]"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -229,6 +305,22 @@ export default function CashFlow() {
                                         <span className={t.type === 'ingreso' ? "text-green-500" : "text-destructive"}>
                                             {t.type === 'gasto' ? '-' : '+'}{formatCurrency(t.amount)}
                                         </span>
+                                    </td>
+                                    <td className="px-6 py-4 flex justify-end gap-2">
+                                        <button
+                                            onClick={() => handleEdit(t)}
+                                            className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+                                            title="Editar"
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(t.id)}
+                                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                            title="Eliminar"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
                                     </td>
                                 </tr>
                             ))}

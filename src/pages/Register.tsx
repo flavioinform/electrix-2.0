@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
+import { createClient } from '@supabase/supabase-js'; // For temporary client
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Label } from '../components/Label';
@@ -34,34 +34,66 @@ export default function Register() {
         const email = `${cleanRut}@electrix.com`;
 
         try {
-            // 1. Sign up auth user
-            const { data, error: authError } = await supabase.auth.signUp({
+            // 1. Create a TEMPORARY Supabase client to avoid logging out the supervisor
+            const tempSupabase = createClient(
+                import.meta.env.VITE_SUPABASE_URL,
+                import.meta.env.VITE_SUPABASE_ANON_KEY,
+                {
+                    auth: {
+                        persistSession: false, // Critical: Don't save this session
+                        autoRefreshToken: false,
+                        detectSessionInUrl: false
+                    }
+                }
+            );
+
+            // 2. Sign up auth user
+            const { data, error: authError } = await tempSupabase.auth.signUp({
                 email,
                 password: formData.password,
+                options: {
+                    data: {
+                        full_name: formData.fullName,
+                        rut: formData.rut,
+                        role: formData.role
+                    }
+                }
             });
 
             if (authError) throw authError;
 
-            if (data.session) {
-                // 2. Create profile
-                // Note: In real setup, you might use a Trigger for this. 
-                // But doing it client-side for simplicity here, relying on RLS "Users can insert their own profile"
-                const { error: profileError } = await supabase.from('profiles').insert({
-                    id: data.user!.id,
+            if (data.user) {
+                // Success! The Trigger or RLS should handle profile creation if set up, 
+                // OR we can try to insert it using the temp client if RLS allows it (it might not if it checks auth.uid() vs user).
+                // Usually, we rely on the session we just created in tempSupabase.
+
+                // For this app's logic (seen in Workflow.tsx), we might just need the Auth user.
+                // But let's check how profile is inserted. 
+                // In original Register.tsx line 49, it inserted into 'profiles'.
+                // If we use tempSupabase, we are logged in as the NEW user in that client instance.
+
+                const { error: profileError } = await tempSupabase.from('profiles').insert({
+                    id: data.user.id,
                     rut: formData.rut,
                     full_name: formData.fullName,
                     role: formData.role,
                 });
 
-                if (profileError) throw profileError;
+                if (profileError) {
+                    console.error("Profile creation error", profileError);
+                    // Continue anyway or throw? If profile fails, user exists but logic might break.
+                    // Given previous code did it manually, we should too.
+                    throw profileError;
+                }
 
-                navigate('/');
+                alert("¡Usuario registrado con éxito!");
+                navigate('/team'); // Go back to Team list or Home
             } else {
-                // If email confirmation is enabled, we might not have a session.
-                setError('Registro exitoso. Por favor verifica tu correo (si aplica) o inicia sesión.');
+                setError('No se pudo crear el usuario.');
             }
 
         } catch (err: any) {
+            console.error("Registration error:", err);
             setError(err.message);
         } finally {
             setLoading(false);
@@ -76,10 +108,10 @@ export default function Register() {
                         <Zap className="h-10 w-10 text-primary" />
                     </div>
                     <h2 className="text-3xl font-bold tracking-tight text-primary">
-                        Registro
+                        Registrar Nuevo Usuario
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
-                        Crea tu cuenta en Electrix
+                        Crea una cuenta para un trabajador o supervisor
                     </p>
                 </div>
 
@@ -155,9 +187,9 @@ export default function Register() {
                     </Button>
 
                     <div className="text-center text-sm">
-                        <Link to="/login" className="text-primary hover:underline">
-                            ¿Ya tienes cuenta? Inicia sesión
-                        </Link>
+                        <Button variant="ghost" type="button" onClick={() => navigate(-1)} className="text-muted-foreground hover:text-primary">
+                            Cancelar / Volver
+                        </Button>
                     </div>
                 </form>
             </div>

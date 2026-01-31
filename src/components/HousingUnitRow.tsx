@@ -8,8 +8,8 @@ import { Label } from './Label';
 
 const STATUS_OPTIONS = [
     "Factibilidad", "TE1", "Empalme", "TDA",
-    "Canalización", "Cableado", "Bomba de agua",
-    "Soldadura", "Artefactado", "Pruebas eléctricas", "Rotulado"
+    "Canalización", "Cableado", "Bomba de agua", "Alimentador de bomba",
+    "Soldadura", "Artefactado", "Extractores", "Pruebas eléctricas", "Rotulado"
 ];
 
 interface HousingUnitRowProps {

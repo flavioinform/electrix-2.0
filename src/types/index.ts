@@ -6,6 +6,7 @@ export interface Profile {
     full_name: string;
     role: UserRole;
     created_at: string;
+    active?: boolean;
 }
 
 export interface Client {

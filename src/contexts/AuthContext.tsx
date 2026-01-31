@@ -57,6 +57,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (error) {
                 console.error('Error fetching profile:', error);
             } else {
+                if (data.active === false) { // Strict check for false, as default/null is true
+                    alert('Tu cuenta ha sido inhabilitada. Contacta a un administrador.');
+                    await supabase.auth.signOut();
+                    setSession(null);
+                    setUser(null);
+                    setProfile(null);
+                    return;
+                }
                 setProfile(data);
             }
         } catch (error) {

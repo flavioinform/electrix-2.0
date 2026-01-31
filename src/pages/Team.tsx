@@ -3,18 +3,16 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
-import { Users, Key, Search, UserCog, Check } from 'lucide-react';
+import { Users, Key, Search, UserCog, Check, Trash2, Power } from 'lucide-react';
 import type { Profile } from '../types';
 
 export default function Team() {
     const { profile } = useAuth();
     const [users, setUsers] = useState<Profile[]>([]);
-    const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
     // Role Management State
     const [editingRole, setEditingRole] = useState<string | null>(null);
-    const [cancelRole, setCancelRole] = useState(false);
 
     // Password Reset State
     const [resettingPassword, setResettingPassword] = useState<string | null>(null);
@@ -26,14 +24,12 @@ export default function Team() {
     }, []);
 
     const fetchUsers = async () => {
-        setLoading(true);
         const { data, error } = await supabase
             .from('profiles')
             .select('*')
             .order('created_at', { ascending: false });
 
         if (data) setUsers(data);
-        setLoading(false);
     };
 
     const handleUpdateRole = async (userId: string, newRole: 'supervisor' | 'trabajador' | 'cliente') => {
@@ -47,6 +43,49 @@ export default function Team() {
         } else {
             setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
             setEditingRole(null);
+        }
+    };
+
+    const handleToggleActive = async (user: Profile) => {
+        const newStatus = !user.active; // If undefined, !undefined is true, but we want to toggle.
+        // Actually, active default true. missing is true.
+        // So if (user.active !== false) -> true. Toggle -> false.
+
+        // Safer:
+        const currentActive = user.active !== false;
+        const nextActive = !currentActive;
+
+        const actionName = nextActive ? "habilitar" : "inhabilitar";
+        if (!window.confirm(`¿Estás seguro de que quieres ${actionName} a ${user.full_name}?`)) return;
+
+        const { error } = await supabase
+            .from('profiles')
+            .update({ active: nextActive })
+            .eq('id', user.id);
+
+        if (error) {
+            alert('Error al actualizar estado: ' + error.message);
+        } else {
+            setUsers(users.map(u => u.id === user.id ? { ...u, active: nextActive } : u));
+        }
+    };
+
+    const handleDeleteUser = async (userId: string) => {
+        if (!window.confirm("¿ADVERTENCIA: Estás seguro de querer ELIMINAR este usuario? Esta acción puede ser irreversible.")) return;
+
+        // Ideally we delete auth user too via RPC. for now just profile.
+        // Or if 'active' logic is sufficient, maybe just hide?
+        // User asked for "Delete". 
+
+        const { error } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', userId);
+
+        if (error) {
+            alert('Error al eliminar usuario: ' + error.message);
+        } else {
+            setUsers(users.filter(u => u.id !== userId));
         }
     };
 
@@ -90,6 +129,9 @@ export default function Team() {
                     </h2>
                     <p className="text-muted-foreground">Administra usuarios, roles y accesos.</p>
                 </div>
+                <Button onClick={() => window.location.href = '/register'}>
+                    + Registrar Usuario
+                </Button>
             </div>
 
             {/* Search */}
@@ -112,6 +154,7 @@ export default function Team() {
                                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Usuario</th>
                                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">RUT</th>
                                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Rol</th>
+                                <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Estado</th>
                                 <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Acciones</th>
                             </tr>
                         </thead>
@@ -151,6 +194,14 @@ export default function Team() {
                                             </span>
                                         )}
                                     </td>
+                                    <td className="p-4 align-middle">
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${user.active !== false
+                                            ? 'bg-green-100 text-green-700'
+                                            : 'bg-red-100 text-red-700'
+                                            }`}>
+                                            {user.active !== false ? 'Activo' : 'Inactivo'}
+                                        </span>
+                                    </td>
                                     <td className="p-4 align-middle text-right">
                                         <div className="flex justify-end gap-2">
 
@@ -176,6 +227,32 @@ export default function Team() {
                                                     title="Restablecer Contraseña"
                                                 >
                                                     <Key className="h-4 w-4" />
+                                                </Button>
+                                            )}
+
+                                            {/* Toggle Active Button */}
+                                            {profile?.role === 'supervisor' && user.id !== profile.id && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleToggleActive(user)}
+                                                    className={user.active !== false ? "text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50" : "text-green-600 hover:text-green-700 hover:bg-green-50"}
+                                                    title={user.active !== false ? "Inhabilitar" : "Habilitar"}
+                                                >
+                                                    {user.active !== false ? <Power className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                                                </Button>
+                                            )}
+
+                                            {/* Delete Button */}
+                                            {profile?.role === 'supervisor' && user.id !== profile.id && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleDeleteUser(user.id)}
+                                                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    title="Eliminar permanentemente"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             )}
                                         </div>

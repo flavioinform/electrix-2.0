@@ -48,7 +48,7 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<Login />} />
 
       <Route path="/client-view" element={
         <ProtectedRoute>
@@ -64,6 +64,11 @@ function AppContent() {
         <Route path="workflow" element={
           <SupervisorRoute>
             <Workflow />
+          </SupervisorRoute>
+        } />
+        <Route path="register" element={
+          <SupervisorRoute>
+            <Register />
           </SupervisorRoute>
         } />
         <Route path="cashflow" element={
