@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/Button';
@@ -24,7 +24,7 @@ export default function Team() {
     }, []);
 
     const fetchUsers = async () => {
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('profiles')
             .select('*')
             .order('created_at', { ascending: false });
@@ -47,11 +47,6 @@ export default function Team() {
     };
 
     const handleToggleActive = async (user: Profile) => {
-        const newStatus = !user.active; // If undefined, !undefined is true, but we want to toggle.
-        // Actually, active default true. missing is true.
-        // So if (user.active !== false) -> true. Toggle -> false.
-
-        // Safer:
         const currentActive = user.active !== false;
         const nextActive = !currentActive;
 
@@ -72,10 +67,6 @@ export default function Team() {
 
     const handleDeleteUser = async (userId: string) => {
         if (!window.confirm("¿ADVERTENCIA: Estás seguro de querer ELIMINAR este usuario? Esta acción puede ser irreversible.")) return;
-
-        // Ideally we delete auth user too via RPC. for now just profile.
-        // Or if 'active' logic is sufficient, maybe just hide?
-        // User asked for "Delete". 
 
         const { error } = await supabase
             .from('profiles')
@@ -98,7 +89,7 @@ export default function Team() {
         setIsResetting(true);
 
         // Call the RPC function (we need to ask user to create this)
-        const { data, error } = await supabase.rpc('admin_reset_password', {
+        const { error } = await supabase.rpc('admin_reset_password', {
             target_user_id: userId,
             new_password: newPassword
         });
@@ -129,9 +120,11 @@ export default function Team() {
                     </h2>
                     <p className="text-muted-foreground">Administra usuarios, roles y accesos.</p>
                 </div>
-                <Button onClick={() => window.location.href = '/register'}>
-                    + Registrar Usuario
-                </Button>
+                {profile?.role === 'supervisor' && (
+                    <Button onClick={() => window.location.href = '/register'}>
+                        + Registrar Usuario
+                    </Button>
+                )}
             </div>
 
             {/* Search */}

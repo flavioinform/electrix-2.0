@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js'; // For temporary client
-import type { Client, Project, HousingUnit } from '../types';
+import type { Client, Project, HousingUnit, Profile } from '../types';
 import { HousingUnitRow } from '../components/HousingUnitRow';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -200,7 +200,9 @@ export default function Workflow() {
             .delete()
             .eq('id', selectedProjectId);
 
-        if (!error) {
+        if (error) {
+            alert('Error al eliminar el proyecto: ' + error.message);
+        } else {
             setProjects(projects.filter(p => p.id !== selectedProjectId));
             setSelectedProjectId('');
             setHousingUnits([]);
@@ -212,32 +214,70 @@ export default function Workflow() {
     const [showCredentialsModal, setShowCredentialsModal] = useState(false);
     const [credentialPassword, setCredentialPassword] = useState('');
     const [creatingCredentials, setCreatingCredentials] = useState(false);
+    const [existingUser, setExistingUser] = useState<Profile | null>(null);
+    const [checkingAccess, setCheckingAccess] = useState(false);
+
+    const handleOpenCredentialsModal = async () => {
+        const client = clients.find(c => c.id === selectedClientId);
+        if (!client || !client.rut) {
+            alert("El cliente debe tener un RUT para generar acceso.");
+            return;
+        }
+
+        setCheckingAccess(true);
+        // 1. Check if profile exists (Ideal case)
+        const { data: profile } = await supabase.from('profiles').select('*').eq('rut', client.rut).single();
+
+        if (profile) {
+            setExistingUser(profile);
+        } else {
+            // 2. Fallback: User might exist in Auth but not in Profiles (Zombie user)
+            // Try to find by email via RPC
+            const cleanRut = client.rut.replace(/[^0-9kK]/g, '');
+            const email = `${cleanRut}@electrix.com`;
+
+            const { data: userId } = await supabase.rpc('get_user_id_by_email', { user_email: email });
+
+            if (userId) {
+                // Found a zombie user. create a mock profile so we can reset password
+                setExistingUser({
+                    id: userId,
+                    rut: client.rut,
+                    full_name: client.name,
+                    role: 'cliente',
+                    created_at: new Date().toISOString()
+                });
+            } else {
+                setExistingUser(null);
+            }
+        }
+
+        setCredentialPassword('');
+        setShowCredentialsModal(true);
+        setCheckingAccess(false);
+    };
 
     const handleCreateClientCredentials = async (e: React.FormEvent) => {
         e.preventDefault();
         const client = clients.find(c => c.id === selectedClientId);
-        if (!client || !client.rut || !credentialPassword) {
-            alert("Error: El cliente debe tener un RUT y la contraseña es obligatoria.");
-            return;
-        }
+        if (!client || !client.rut || !credentialPassword) return;
 
         setCreatingCredentials(true);
         try {
-            // 1. Create a TEMPORARY Supabase client to avoid logging out the supervisor
+            // 1. Create a TEMPORARY Supabase client
             const tempSupabase = createClient(
                 import.meta.env.VITE_SUPABASE_URL,
                 import.meta.env.VITE_SUPABASE_ANON_KEY,
                 {
                     auth: {
-                        persistSession: false, // Critical: Don't save this session
+                        persistSession: false,
                         autoRefreshToken: false,
                         detectSessionInUrl: false
                     }
                 }
             );
 
-            // 2. Prepare email (RUT based)
-            // cleanRut remove all non alphanumeric characters
+            // 2. Prepare email
             const cleanRut = client.rut.replace(/[^0-9kK]/g, '');
             const email = `${cleanRut}@electrix.com`;
 
@@ -249,7 +289,7 @@ export default function Workflow() {
                     data: {
                         full_name: client.name,
                         rut: client.rut,
-                        role: 'cliente' // Important: Set role to client
+                        role: 'cliente'
                     }
                 }
             });
@@ -264,6 +304,27 @@ export default function Workflow() {
             alert(`Error al crear credenciales: ${error.message}`);
         } finally {
             setCreatingCredentials(false);
+        }
+    };
+
+    const handleResetClientPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!existingUser || !credentialPassword) return;
+
+        setCreatingCredentials(true);
+        const { error } = await supabase.rpc('admin_reset_password', {
+            target_user_id: existingUser.id,
+            new_password: credentialPassword
+        });
+
+        setCreatingCredentials(false);
+
+        if (error) {
+            alert('Error al actualizar contraseña: ' + error.message);
+        } else {
+            alert(`¡Acceso actualizado!\n\nUsuario: ${existingUser.rut}\nNueva Contraseña: ${credentialPassword}`);
+            setShowCredentialsModal(false);
+            setCredentialPassword('');
         }
     };
 
@@ -390,9 +451,14 @@ export default function Workflow() {
                     {selectedClientId && !isEditingClient && profile?.role === 'supervisor' && (
                         <Button
                             className="h-12 gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                            onClick={() => setShowCredentialsModal(true)}
+                            onClick={handleOpenCredentialsModal}
+                            disabled={checkingAccess}
                         >
-                            <Key className="h-4 w-4" />
+                            {checkingAccess ? (
+                                <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <Key className="h-4 w-4" />
+                            )}
                             Generar Acceso
                         </Button>
                     )}
@@ -404,14 +470,24 @@ export default function Workflow() {
                         <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md shadow-xl animate-in zoom-in-95">
                             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                                 <UserPlus className="h-5 w-5 text-primary" />
-                                Crear Credenciales
+                                {existingUser ? 'Actualizar Acceso' : 'Crear Credenciales'}
                             </h3>
-                            <p className="text-muted-foreground mb-4 text-sm">
-                                Esto creará un usuario para <strong>{clients.find(c => c.id === selectedClientId)?.name}</strong>.
-                                El usuario podrá iniciar sesión con su RUT y la contraseña que definas aquí.
-                            </p>
 
-                            <form onSubmit={handleCreateClientCredentials} className="space-y-4">
+                            {existingUser ? (
+                                <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-yellow-600 text-sm">
+                                    <strong>¡Aviso!</strong> Este cliente ya tiene un usuario activo.
+                                    <br /><br />
+                                    Por seguridad, <strong>no podemos mostrar la contraseña actual</strong>.
+                                    Sin embargo, puedes crear una nueva aquí mismo y compartirla con el cliente.
+                                </div>
+                            ) : (
+                                <p className="text-muted-foreground mb-4 text-sm">
+                                    Esto creará un usuario para <strong>{clients.find(c => c.id === selectedClientId)?.name}</strong>.
+                                    El usuario podrá iniciar sesión con su RUT y la contraseña que definas aquí.
+                                </p>
+                            )}
+
+                            <form onSubmit={existingUser ? handleResetClientPassword : handleCreateClientCredentials} className="space-y-4">
                                 <div>
                                     <Label>RUT (Solo lectura)</Label>
                                     <Input
@@ -425,7 +501,7 @@ export default function Workflow() {
                                 </div>
 
                                 <div>
-                                    <Label>Asignar Contraseña</Label>
+                                    <Label>{existingUser ? 'Nueva Contraseña' : 'Asignar Contraseña'}</Label>
                                     <Input
                                         type="text" // Visible so supervisor can see it
                                         value={credentialPassword}
@@ -439,7 +515,7 @@ export default function Workflow() {
                                 <div className="flex justify-end gap-2 pt-2">
                                     <Button type="button" variant="ghost" onClick={() => setShowCredentialsModal(false)}>Cancelar</Button>
                                     <Button type="submit" disabled={creatingCredentials || !clients.find(c => c.id === selectedClientId)?.rut}>
-                                        {creatingCredentials ? 'Creando...' : 'Crear Usuario'}
+                                        {creatingCredentials ? 'Procesando...' : (existingUser ? 'Actualizar Contraseña' : 'Crear Usuario')}
                                     </Button>
                                 </div>
                             </form>
