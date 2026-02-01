@@ -644,6 +644,20 @@ export default function Workflow() {
                                 onUpdate={(updated) => {
                                     setHousingUnits(prev => prev.map(u => u.id === updated.id ? updated : u));
                                 }}
+                                onDelete={async () => {
+                                    if (!window.confirm("¿Estás seguro de que quieres eliminar esta vivienda?")) return;
+
+                                    const { error } = await supabase
+                                        .from('housing_units')
+                                        .delete()
+                                        .eq('id', unit.id);
+
+                                    if (error) {
+                                        alert("Error al eliminar la vivienda: " + error.message);
+                                    } else {
+                                        setHousingUnits(prev => prev.filter(u => u.id !== unit.id));
+                                    }
+                                }}
                             />
                         ))}
                     </div>

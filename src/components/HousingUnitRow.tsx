@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import type { HousingUnit } from '../types';
 import { Button } from './Button';
-import { MessageSquare, Image as ImageIcon, ChevronDown, ChevronUp, Save, Upload, X, Loader2 } from 'lucide-react';
+import { MessageSquare, Image as ImageIcon, ChevronDown, ChevronUp, Save, Upload, X, Loader2, Pencil, Trash2, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { Label } from './Label';
+import { Input } from './Input';
 
 const STATUS_OPTIONS = [
     "Factibilidad", "TE1", "Empalme", "TDA",
@@ -15,14 +16,17 @@ const STATUS_OPTIONS = [
 interface HousingUnitRowProps {
     unit: HousingUnit;
     onUpdate: (unit: HousingUnit) => void;
+    onDelete: () => void;
 }
 
-export function HousingUnitRow({ unit, onUpdate }: HousingUnitRowProps) {
+export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps) {
     const [expanded, setExpanded] = useState(true);
     const [activeTab, setActiveTab] = useState<'none' | 'comments' | 'images'>('none');
     const [comment, setComment] = useState(unit.comments || '');
     const [isSavingComment, setIsSavingComment] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editName, setEditName] = useState(unit.name);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const toggleStatus = async (option: string) => {
@@ -125,10 +129,74 @@ export function HousingUnitRow({ unit, onUpdate }: HousingUnitRowProps) {
         }
     };
 
+    const handleSaveName = async () => {
+        if (!editName || editName === unit.name) {
+            setIsEditingName(false);
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('housing_units')
+                .update({ name: editName })
+                .eq('id', unit.id);
+
+            if (error) throw error;
+
+            onUpdate({ ...unit, name: editName });
+            setIsEditingName(false);
+        } catch (error: any) {
+            console.error("Error updating unit name:", error);
+            alert("Error al actualizar el nombre: " + error.message);
+        }
+    };
+
     return (
         <div className="border rounded-lg bg-card/50 border-border p-4 mb-4">
             <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-foreground">{unit.name}</h3>
+                <div className="flex-1 flex items-center gap-2">
+                    {isEditingName ? (
+                        <div className="flex items-center gap-2 animate-in fade-in">
+                            <Input
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="h-9 w-64"
+                                autoFocus
+                            />
+                            <Button size="sm" onClick={handleSaveName} className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700">
+                                <Check className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => {
+                                setIsEditingName(false);
+                                setEditName(unit.name);
+                            }} className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-bold text-foreground">{unit.name}</h3>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                onClick={() => setIsEditingName(true)}
+                                title="Editar nombre"
+                            >
+                                <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={onDelete}
+                                title="Eliminar vivienda"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    )}
+                </div>
                 <div className="flex gap-2">
                     <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
                         {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
