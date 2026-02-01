@@ -42,6 +42,7 @@ export default function Workflow() {
 
     const [newUnitName, setNewUnitName] = useState('');
     const [showAddUnit, setShowAddUnit] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Edit Project State
     const [isEditingProject, setIsEditingProject] = useState(false);
@@ -612,13 +613,25 @@ export default function Workflow() {
             {/* 3. Housing Units Section */}
             {selectedProjectId && (
                 <section className="space-y-4 border-t border-border/50 pt-8">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col md:flex-row gap-4 justify-between items-end mb-4">
                         <h2 className="text-xl font-bold flex items-center gap-2">
                             <Home className="text-primary" /> Viviendas / Unidades
                         </h2>
-                        <Button size="sm" className="bg-primary text-primary-foreground font-bold" onClick={() => setShowAddUnit(!showAddUnit)}>
-                            {showAddUnit ? 'Cancelar' : '+ Agregar Vivienda'}
-                        </Button>
+
+                        <div className="flex items-center gap-4 flex-1 justify-end w-full md:w-auto">
+                            <div className="relative w-full md:w-64">
+                                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Buscar vivienda..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-9"
+                                />
+                            </div>
+                            <Button size="sm" className="bg-primary text-primary-foreground font-bold whitespace-nowrap" onClick={() => setShowAddUnit(!showAddUnit)}>
+                                {showAddUnit ? 'Cancelar' : '+ Agregar Vivienda'}
+                            </Button>
+                        </div>
                     </div>
 
                     {showAddUnit && (
@@ -637,29 +650,36 @@ export default function Workflow() {
                                 No hay viviendas registradas en este proyecto.
                             </div>
                         )}
-                        {housingUnits.map(unit => (
-                            <HousingUnitRow
-                                key={unit.id}
-                                unit={unit}
-                                onUpdate={(updated) => {
-                                    setHousingUnits(prev => prev.map(u => u.id === updated.id ? updated : u));
-                                }}
-                                onDelete={async () => {
-                                    if (!window.confirm("¿Estás seguro de que quieres eliminar esta vivienda?")) return;
+                        {housingUnits
+                            .filter(unit => unit.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                            .map(unit => (
+                                <HousingUnitRow
+                                    key={unit.id}
+                                    unit={unit}
+                                    onUpdate={(updated) => {
+                                        setHousingUnits(prev => prev.map(u => u.id === updated.id ? updated : u));
+                                    }}
+                                    onDelete={async () => {
+                                        if (!window.confirm("¿Estás seguro de que quieres eliminar esta vivienda?")) return;
 
-                                    const { error } = await supabase
-                                        .from('housing_units')
-                                        .delete()
-                                        .eq('id', unit.id);
+                                        const { error } = await supabase
+                                            .from('housing_units')
+                                            .delete()
+                                            .eq('id', unit.id);
 
-                                    if (error) {
-                                        alert("Error al eliminar la vivienda: " + error.message);
-                                    } else {
-                                        setHousingUnits(prev => prev.filter(u => u.id !== unit.id));
-                                    }
-                                }}
-                            />
-                        ))}
+                                        if (error) {
+                                            alert("Error al eliminar la vivienda: " + error.message);
+                                        } else {
+                                            setHousingUnits(prev => prev.filter(u => u.id !== unit.id));
+                                        }
+                                    }}
+                                />
+                            ))}
+                        {housingUnits.length > 0 && housingUnits.filter(unit => unit.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                            <div className="text-center py-8 text-muted-foreground">
+                                No se encontraron viviendas que coincidan con "{searchQuery}"
+                            </div>
+                        )}
                     </div>
                 </section>
             )}

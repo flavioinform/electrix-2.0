@@ -20,7 +20,7 @@ interface HousingUnitRowProps {
 }
 
 export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps) {
-    const [expanded, setExpanded] = useState(true);
+    const [expanded, setExpanded] = useState(false);
     const [activeTab, setActiveTab] = useState<'none' | 'comments' | 'images'>('none');
     const [comment, setComment] = useState(unit.comments || '');
     const [isSavingComment, setIsSavingComment] = useState(false);
@@ -153,7 +153,10 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
 
     return (
         <div className="border rounded-lg bg-card/50 border-border p-4 mb-4">
-            <div className="flex items-center justify-between mb-4">
+            <div
+                className="flex items-center justify-between mb-4 cursor-pointer hover:bg-card/80 transition-colors rounded-md p-2 -m-2"
+                onClick={() => setExpanded(!expanded)}
+            >
                 <div className="flex-1 flex items-center gap-2">
                     {isEditingName ? (
                         <div className="flex items-center gap-2 animate-in fade-in">
@@ -162,11 +165,13 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
                                 onChange={(e) => setEditName(e.target.value)}
                                 className="h-9 w-64"
                                 autoFocus
+                                onClick={(e) => e.stopPropagation()}
                             />
-                            <Button size="sm" onClick={handleSaveName} className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700">
+                            <Button size="sm" onClick={(e) => { e.stopPropagation(); handleSaveName(); }} className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700">
                                 <Check className="h-4 w-4" />
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => {
+                            <Button size="sm" variant="ghost" onClick={(e) => {
+                                e.stopPropagation();
                                 setIsEditingName(false);
                                 setEditName(unit.name);
                             }} className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
@@ -180,7 +185,7 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
                                 size="sm"
                                 variant="ghost"
                                 className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                                onClick={() => setIsEditingName(true)}
+                                onClick={(e) => { e.stopPropagation(); setIsEditingName(true); }}
                                 title="Editar nombre"
                             >
                                 <Pencil className="h-4 w-4" />
@@ -189,7 +194,7 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
                                 size="sm"
                                 variant="ghost"
                                 className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={onDelete}
+                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
                                 title="Eliminar vivienda"
                             >
                                 <Trash2 className="h-4 w-4" />
