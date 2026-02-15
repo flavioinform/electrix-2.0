@@ -8,7 +8,7 @@ import { Label } from './Label';
 import { Input } from './Input';
 
 const STATUS_OPTIONS = [
-    "Factibilidad", "TE1", "Empalme", "TDA",
+    "Factibilidad", "TE1", "Empalme", "TDA", "Puesta a tierra TDA",
     "Canalización", "Cableado", "Bomba de agua", "Alimentador de bomba",
     "Soldadura", "Artefactado", "Extractores", "Pruebas eléctricas", "Rotulado"
 ];
