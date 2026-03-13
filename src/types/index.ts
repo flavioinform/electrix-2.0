@@ -21,6 +21,9 @@ export interface Project {
     id: string;
     client_id: string;
     name: string;
+    lat?: number | null;
+    lng?: number | null;
+    kmz_path?: string | null;
     created_at: string;
     status: string;
     client?: Client;
@@ -30,6 +33,8 @@ export interface HousingUnit {
     id: string;
     project_id: string;
     name: string;
+    lat?: number | null;
+    lng?: number | null;
     status: Record<string, boolean>; // { "factibilidad": true, ... }
     comments: string;
     images?: string[];

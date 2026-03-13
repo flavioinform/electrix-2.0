@@ -27,6 +27,8 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
     const [isUploading, setIsUploading] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [editName, setEditName] = useState(unit.name);
+    const [editLat, setEditLat] = useState(unit.lat?.toString() || '');
+    const [editLng, setEditLng] = useState(unit.lng?.toString() || '');
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const toggleStatus = async (option: string) => {
@@ -129,25 +131,30 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
         }
     };
 
-    const handleSaveName = async () => {
-        if (!editName || editName === unit.name) {
+    const handleSaveUnit = async () => {
+        if (!editName) {
             setIsEditingName(false);
             return;
         }
 
         try {
+            const updates = { 
+                name: editName,
+                lat: editLat ? parseFloat(editLat) : null,
+                lng: editLng ? parseFloat(editLng) : null
+            };
             const { error } = await supabase
                 .from('housing_units')
-                .update({ name: editName })
+                .update(updates)
                 .eq('id', unit.id);
 
             if (error) throw error;
 
-            onUpdate({ ...unit, name: editName });
+            onUpdate({ ...unit, ...updates });
             setIsEditingName(false);
         } catch (error: any) {
-            console.error("Error updating unit name:", error);
-            alert("Error al actualizar el nombre: " + error.message);
+            console.error("Error updating unit:", error);
+            alert("Error al actualizar la unidad: " + error.message);
         }
     };
 
@@ -159,21 +166,36 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
             >
                 <div className="flex-1 flex items-center gap-2">
                     {isEditingName ? (
-                        <div className="flex items-center gap-2 animate-in fade-in">
+                        <div className="flex items-center gap-2 animate-in fade-in flex-wrap" onClick={(e) => e.stopPropagation()}>
                             <Input
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
-                                className="h-9 w-64"
+                                className="h-9 w-48"
+                                placeholder="Nombre"
                                 autoFocus
-                                onClick={(e) => e.stopPropagation()}
                             />
-                            <Button size="sm" onClick={(e) => { e.stopPropagation(); handleSaveName(); }} className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700">
+                            <Input
+                                value={editLat}
+                                onChange={(e) => setEditLat(e.target.value)}
+                                className="h-9 w-32"
+                                placeholder="Latitud (-33.4)"
+                                type="number" step="any"
+                            />
+                            <Input
+                                value={editLng}
+                                onChange={(e) => setEditLng(e.target.value)}
+                                className="h-9 w-32"
+                                placeholder="Longitud (-70.6)"
+                                type="number" step="any"
+                            />
+                            <Button size="sm" onClick={() => handleSaveUnit()} className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700">
                                 <Check className="h-4 w-4" />
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={(e) => {
-                                e.stopPropagation();
+                            <Button size="sm" variant="ghost" onClick={() => {
                                 setIsEditingName(false);
                                 setEditName(unit.name);
+                                setEditLat(unit.lat?.toString() || '');
+                                setEditLng(unit.lng?.toString() || '');
                             }} className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
                                 <X className="h-4 w-4" />
                             </Button>

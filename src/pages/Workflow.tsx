@@ -3,10 +3,12 @@ import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js'; // For temporary client
 import type { Client, Project, HousingUnit, Profile } from '../types';
 import { HousingUnitRow } from '../components/HousingUnitRow';
+import { ProjectMap } from '../components/ProjectMap';
+import { useJsApiLoader, StandaloneSearchBox } from '@react-google-maps/api';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Label } from '../components/Label';
-import { Search, Building, FolderOpen, Home, Key, UserPlus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { Search, Building, FolderOpen, Home, Key, UserPlus, Pencil, Trash2, X, Check, Loader2, ChevronDown, ChevronUp, Map as MapIcon } from 'lucide-react';
 import { formatRut } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -21,9 +23,19 @@ export default function Workflow() {
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
-    const [loadingClients, setLoadingClients] = useState(false);
-    const [loadingProjects, setLoadingProjects] = useState(false);
     const [loadingUnits, setLoadingUnits] = useState(false);
+
+    // Google Maps Search Box refs
+    const newProjectSearchBoxRef = React.useRef<google.maps.places.SearchBox | null>(null);
+    const editProjectSearchBoxRef = React.useRef<google.maps.places.SearchBox | null>(null);
+
+    // Load Maps API libraries
+    const libraries: ("places" | "drawing" | "geometry" | "visualization")[] = ['places'];
+    const { isLoaded } = useJsApiLoader({
+        id: 'google-map-script',
+        googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+        libraries,
+    });
 
     // Forms State
     const [newClientName, setNewClientName] = useState('');
@@ -38,15 +50,24 @@ export default function Workflow() {
     const [editClientType, setEditClientType] = useState('');
 
     const [newProjectName, setNewProjectName] = useState('');
+    const [newProjectLat, setNewProjectLat] = useState('');
+    const [newProjectLng, setNewProjectLng] = useState('');
     const [showAddProject, setShowAddProject] = useState(false);
 
     const [newUnitName, setNewUnitName] = useState('');
+    const [newUnitLat, setNewUnitLat] = useState('');
+    const [newUnitLng, setNewUnitLng] = useState('');
     const [showAddUnit, setShowAddUnit] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Edit Project State
     const [isEditingProject, setIsEditingProject] = useState(false);
     const [editProjectName, setEditProjectName] = useState('');
+    const [editProjectLat, setEditProjectLat] = useState('');
+    const [editProjectLng, setEditProjectLng] = useState('');
+    const [editProjectKmzFile, setEditProjectKmzFile] = useState<File | null>(null);
+    const [isUploadingKmz, setIsUploadingKmz] = useState(false);
+    const [showMap, setShowMap] = useState(false);
 
     // Constants
     const CLIENT_TYPES = ["Constructora", "Particular", "Empresa", "Otro"];
@@ -76,17 +97,13 @@ export default function Workflow() {
     }, [selectedProjectId]);
 
     const fetchClients = async () => {
-        setLoadingClients(true);
         const { data } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
         if (data) setClients(data);
-        setLoadingClients(false);
     };
 
     const fetchProjects = async (clientId: string) => {
-        setLoadingProjects(true);
         const { data } = await supabase.from('projects').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
         if (data) setProjects(data);
-        setLoadingProjects(false);
     };
 
     const fetchHousingUnits = async (projectId: string) => {
@@ -147,14 +164,34 @@ export default function Workflow() {
         const { data } = await supabase.from('projects').insert({
             client_id: selectedClientId,
             name: newProjectName,
-            status: 'En curso'
+            status: 'En curso',
+            lat: newProjectLat ? parseFloat(newProjectLat) : null,
+            lng: newProjectLng ? parseFloat(newProjectLng) : null
         }).select().single();
 
         if (data) {
             setProjects([data, ...projects]);
             setSelectedProjectId(data.id); // Auto select
             setNewProjectName('');
+            setNewProjectLat('');
+            setNewProjectLng('');
             setShowAddProject(false);
+        }
+    };
+
+    const handleMarkerDragEnd = async (viviendaId: string, lat: number, lng: number) => {
+        // 1. Update local state for immediate feedback
+        setHousingUnits(prev => prev.map(u => u.id === viviendaId ? { ...u, lat, lng } : u));
+
+        // 2. Persist to database
+        const { error } = await supabase
+            .from('housing_units')
+            .update({ lat, lng })
+            .eq('id', viviendaId);
+
+        if (error) {
+            console.error("Error updating housing unit position:", error);
+            alert("Error al guardar la nueva posición: " + error.message);
         }
     };
 
@@ -165,27 +202,81 @@ export default function Workflow() {
         const { data } = await supabase.from('housing_units').insert({
             project_id: selectedProjectId,
             name: newUnitName,
-            status: {}
+            status: {},
+            lat: newUnitLat ? parseFloat(newUnitLat) : null,
+            lng: newUnitLng ? parseFloat(newUnitLng) : null
         }).select().single();
 
         if (data) {
             setHousingUnits([...housingUnits, data]); // Append to end usually
             setNewUnitName('');
+            setNewUnitLat('');
+            setNewUnitLng('');
             setShowAddUnit(false);
+        }
+    };
+
+    // Places Callbacks
+    const onNewProjectPlacesChanged = () => {
+        const places = newProjectSearchBoxRef.current?.getPlaces();
+        if (places && places.length > 0) {
+            const place = places[0];
+            if (place.geometry?.location) {
+                setNewProjectLat(place.geometry.location.lat().toString());
+                setNewProjectLng(place.geometry.location.lng().toString());
+                if (!newProjectName && place.name) {
+                    setNewProjectName(place.name);
+                }
+            }
+        }
+    };
+
+    const onEditProjectPlacesChanged = () => {
+        const places = editProjectSearchBoxRef.current?.getPlaces();
+        if (places && places.length > 0) {
+            const place = places[0];
+            if (place.geometry?.location) {
+                setEditProjectLat(place.geometry.location.lat().toString());
+                setEditProjectLng(place.geometry.location.lng().toString());
+            }
         }
     };
 
     const handleUpdateProject = async () => {
         if (!editProjectName || !selectedProjectId) return;
 
+        let kmz_path = undefined;
+        if (editProjectKmzFile) {
+            setIsUploadingKmz(true);
+            const fileExt = editProjectKmzFile.name.split('.').pop();
+            const fileName = `${selectedProjectId}-${Math.random()}.${fileExt}`;
+            
+            const { error: uploadError } = await supabase.storage
+                .from('mapas')
+                .upload(fileName, editProjectKmzFile);
+                
+            if (!uploadError) {
+                kmz_path = fileName;
+            }
+            setIsUploadingKmz(false);
+        }
+
+        const updates: any = { 
+            name: editProjectName,
+            lat: editProjectLat ? parseFloat(editProjectLat) : null,
+            lng: editProjectLng ? parseFloat(editProjectLng) : null
+        };
+        if (kmz_path !== undefined) updates.kmz_path = kmz_path;
+
         const { error } = await supabase
             .from('projects')
-            .update({ name: editProjectName })
+            .update(updates)
             .eq('id', selectedProjectId);
 
         if (!error) {
-            setProjects(projects.map(p => p.id === selectedProjectId ? { ...p, name: editProjectName } : p));
+            setProjects(projects.map(p => p.id === selectedProjectId ? { ...p, ...updates } : p));
             setIsEditingProject(false);
+            setEditProjectKmzFile(null);
         }
     };
 
@@ -538,10 +629,35 @@ export default function Workflow() {
                     </div>
 
                     {showAddProject && (
-                        <form onSubmit={handleCreateProject} className="bg-card border border-border p-4 rounded-lg flex gap-4 items-end animate-in zoom-in-95">
-                            <div className="flex-1">
+                        <form onSubmit={handleCreateProject} className="bg-card border border-border p-4 rounded-lg flex gap-4 items-end animate-in zoom-in-95 flex-wrap">
+                            <div className="w-full mb-2">
+                                <Label>Buscar Ubicación</Label>
+                                {isLoaded ? (
+                                    <StandaloneSearchBox
+                                        onLoad={ref => newProjectSearchBoxRef.current = ref}
+                                        onPlacesChanged={onNewProjectPlacesChanged}
+                                    >
+                                        <Input
+                                            type="text"
+                                            placeholder="Busca una dirección o lugar con Google Maps..."
+                                            className="w-full h-10"
+                                        />
+                                    </StandaloneSearchBox>
+                                ) : (
+                                    <Input placeholder="Cargando Google Maps..." disabled className="w-full h-10" />
+                                )}
+                            </div>
+                            <div className="flex-[2] min-w-[200px]">
                                 <Label>Nombre del proyecto</Label>
-                                <Input value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="Ej. Edificio A" autoFocus />
+                                <Input value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="Ej. Edificio A" />
+                            </div>
+                            <div className="flex-1 min-w-[120px]">
+                                <Label>Latitud</Label>
+                                <Input value={newProjectLat} onChange={e => setNewProjectLat(e.target.value)} placeholder="-33.448" type="number" step="any" />
+                            </div>
+                            <div className="flex-1 min-w-[120px]">
+                                <Label>Longitud</Label>
+                                <Input value={newProjectLng} onChange={e => setNewProjectLng(e.target.value)} placeholder="-70.669" type="number" step="any" />
                             </div>
                             <Button type="submit">Crear</Button>
                         </form>
@@ -549,19 +665,69 @@ export default function Workflow() {
 
                     <div className="relative flex items-center gap-2">
                         {isEditingProject ? (
-                            <div className="flex-1 flex items-center gap-2 animate-in fade-in">
-                                <Input
-                                    value={editProjectName}
-                                    onChange={e => setEditProjectName(e.target.value)}
-                                    autoFocus
-                                    className="h-10"
-                                />
-                                <Button size="sm" onClick={handleUpdateProject} className="h-10 w-10 p-0 bg-green-600 hover:bg-green-700">
-                                    <Check className="h-4 w-4" />
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={() => setIsEditingProject(false)} className="h-10 w-10 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
-                                    <X className="h-4 w-4" />
-                                </Button>
+                            <div className="flex-1 flex flex-col gap-2 animate-in fade-in bg-card border border-border p-4 rounded-lg">
+                                <div className="w-full mb-2">
+                                    <Label>Buscar Nueva Ubicación</Label>
+                                    {isLoaded ? (
+                                        <StandaloneSearchBox
+                                            onLoad={ref => editProjectSearchBoxRef.current = ref}
+                                            onPlacesChanged={onEditProjectPlacesChanged}
+                                        >
+                                            <Input
+                                                type="text"
+                                                placeholder="Actualiza la ubicación buscando una dirección..."
+                                                className="w-full h-10"
+                                            />
+                                        </StandaloneSearchBox>
+                                    ) : null}
+                                </div>
+                                <div className="flex gap-2 items-end flex-wrap">
+                                    <div className="flex-[2] min-w-[150px]">
+                                        <Label>Nombre</Label>
+                                        <Input
+                                            value={editProjectName}
+                                            onChange={e => setEditProjectName(e.target.value)}
+                                            className="h-10"
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-[100px]">
+                                        <Label>Latitud</Label>
+                                        <Input
+                                            value={editProjectLat}
+                                            onChange={e => setEditProjectLat(e.target.value)}
+                                            type="number" step="any"
+                                            className="h-10"
+                                            placeholder="-33.448"
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-[100px]">
+                                        <Label>Longitud</Label>
+                                        <Input
+                                            value={editProjectLng}
+                                            onChange={e => setEditProjectLng(e.target.value)}
+                                            type="number" step="any"
+                                            className="h-10"
+                                            placeholder="-70.669"
+                                        />
+                                    </div>
+                                    <div className="flex-[2] min-w-[200px]">
+                                        <Label>Archivo KMZ</Label>
+                                        <Input
+                                            type="file"
+                                            accept=".kmz"
+                                            onChange={e => setEditProjectKmzFile(e.target.files?.[0] || null)}
+                                            className="h-10 pt-1.5"
+                                        />
+                                    </div>
+                                    <div className="flex gap-1 ml-auto">
+                                        <Button size="sm" onClick={handleUpdateProject} disabled={isUploadingKmz} className="h-10 w-10 p-0 bg-green-600 hover:bg-green-700">
+                                            {isUploadingKmz ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                        </Button>
+                                        <Button size="sm" variant="ghost" onClick={() => setIsEditingProject(false)} disabled={isUploadingKmz} className="h-10 w-10 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
                             </div>
                         ) : (
                             <>
@@ -586,6 +752,9 @@ export default function Workflow() {
                                                 const proj = projects.find(p => p.id === selectedProjectId);
                                                 if (proj) {
                                                     setEditProjectName(proj.name);
+                                                    setEditProjectLat(proj.lat?.toString() || '');
+                                                    setEditProjectLng(proj.lng?.toString() || '');
+                                                    setEditProjectKmzFile(null);
                                                     setIsEditingProject(true);
                                                 }
                                             }}
@@ -607,6 +776,31 @@ export default function Workflow() {
                             </>
                         )}
                     </div>
+
+                    {selectedProjectId && projects.find(p => p.id === selectedProjectId)?.lat && projects.find(p => p.id === selectedProjectId)?.lng && (
+                        <div className="mt-8 border border-border rounded-lg overflow-hidden transition-all duration-300">
+                            <button 
+                                onClick={() => setShowMap(!showMap)}
+                                className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <MapIcon className="h-5 w-5 text-primary" />
+                                    <h3 className="text-lg font-bold">Ubicación del Proyecto</h3>
+                                </div>
+                                {showMap ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                            </button>
+                            
+                            {showMap && (
+                                <div className="p-4 border-t border-border animate-in slide-in-from-top-2 duration-200">
+                                    <ProjectMap 
+                                        proyectoId={selectedProjectId} 
+                                        viviendas={housingUnits} 
+                                        onViviendaMove={handleMarkerDragEnd}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </section>
             )}
 
@@ -628,17 +822,34 @@ export default function Workflow() {
                                     className="pl-9"
                                 />
                             </div>
-                            <Button size="sm" className="bg-primary text-primary-foreground font-bold whitespace-nowrap" onClick={() => setShowAddUnit(!showAddUnit)}>
+                            <Button size="sm" className="bg-primary text-primary-foreground font-bold whitespace-nowrap" onClick={() => {
+                                if (!showAddUnit) {
+                                    const proj = projects.find(p => p.id === selectedProjectId);
+                                    if (proj) {
+                                        setNewUnitLat(proj.lat?.toString() || '');
+                                        setNewUnitLng(proj.lng?.toString() || '');
+                                    }
+                                }
+                                setShowAddUnit(!showAddUnit);
+                            }}>
                                 {showAddUnit ? 'Cancelar' : '+ Agregar Vivienda'}
                             </Button>
                         </div>
                     </div>
 
                     {showAddUnit && (
-                        <form onSubmit={handleCreateUnit} className="bg-card border border-border p-4 rounded-lg flex gap-4 items-end animate-in zoom-in-95">
-                            <div className="flex-1">
+                        <form onSubmit={handleCreateUnit} className="bg-card border border-border p-4 rounded-lg flex gap-4 items-end animate-in zoom-in-95 flex-wrap">
+                            <div className="flex-[2] min-w-[200px]">
                                 <Label>Nombre de idenfiticación</Label>
                                 <Input value={newUnitName} onChange={e => setNewUnitName(e.target.value)} placeholder="Ej. Depto 101" autoFocus />
+                            </div>
+                            <div className="flex-1 min-w-[120px]">
+                                <Label>Latitud (Opcional)</Label>
+                                <Input value={newUnitLat} onChange={e => setNewUnitLat(e.target.value)} placeholder="-33.448" type="number" step="any" />
+                            </div>
+                            <div className="flex-1 min-w-[120px]">
+                                <Label>Longitud (Opcional)</Label>
+                                <Input value={newUnitLng} onChange={e => setNewUnitLng(e.target.value)} placeholder="-70.669" type="number" step="any" />
                             </div>
                             <Button type="submit">Agregar</Button>
                         </form>

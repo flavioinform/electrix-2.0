@@ -11,7 +11,6 @@ import { cn } from '../lib/utils';
 export default function CashFlow() {
     const { profile } = useAuth();
     const [transactions, setTransactions] = useState<AppTransaction[]>([]);
-    const [loading, setLoading] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
 
     // Totals
@@ -34,11 +33,10 @@ export default function CashFlow() {
     }, [profile]); // Refetch if profile loads (usually happens once)
 
     const fetchTransactions = async () => {
-        setLoading(true);
         // RLS will automatically filter:
         // Supervisor -> All
         // Worker -> Only 'gasto'
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('transactions')
             .select('*')
             .order('date', { ascending: false });
@@ -47,7 +45,6 @@ export default function CashFlow() {
             setTransactions(data);
             calculateTotals(data);
         }
-        setLoading(false);
     };
 
     const calculateTotals = (data: AppTransaction[]) => {
@@ -91,7 +88,7 @@ export default function CashFlow() {
             }
         } else {
             // Create new
-            const { data, error } = await supabase.from('transactions').insert({
+            const { data } = await supabase.from('transactions').insert({
                 type: formData.type,
                 amount: parseFloat(formData.amount),
                 category: formData.category,
