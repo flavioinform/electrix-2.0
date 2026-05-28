@@ -35,6 +35,7 @@ export interface HousingUnit {
     name: string;
     lat?: number | null;
     lng?: number | null;
+    address?: string | null;
     status: Record<string, boolean>; // { "factibilidad": true, ... }
     comments: string;
     images?: string[];

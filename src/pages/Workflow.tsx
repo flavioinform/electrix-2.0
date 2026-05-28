@@ -3,12 +3,11 @@ import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js'; // For temporary client
 import type { Client, Project, HousingUnit, Profile } from '../types';
 import { HousingUnitRow } from '../components/HousingUnitRow';
-import { ProjectMap } from '../components/ProjectMap';
 import { useJsApiLoader, StandaloneSearchBox } from '@react-google-maps/api';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Label } from '../components/Label';
-import { Search, Building, FolderOpen, Home, Key, UserPlus, Pencil, Trash2, X, Check, Loader2, ChevronDown, ChevronUp, Map as MapIcon } from 'lucide-react';
+import { Search, Building, FolderOpen, Home, Key, UserPlus, Pencil, Trash2, X, Check, Loader2 } from 'lucide-react';
 import { formatRut } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -55,8 +54,7 @@ export default function Workflow() {
     const [showAddProject, setShowAddProject] = useState(false);
 
     const [newUnitName, setNewUnitName] = useState('');
-    const [newUnitLat, setNewUnitLat] = useState('');
-    const [newUnitLng, setNewUnitLng] = useState('');
+    const [newUnitAddress, setNewUnitAddress] = useState('');
     const [showAddUnit, setShowAddUnit] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -67,7 +65,6 @@ export default function Workflow() {
     const [editProjectLng, setEditProjectLng] = useState('');
     const [editProjectKmzFile, setEditProjectKmzFile] = useState<File | null>(null);
     const [isUploadingKmz, setIsUploadingKmz] = useState(false);
-    const [showMap, setShowMap] = useState(false);
 
     // Constants
     const CLIENT_TYPES = ["Constructora", "Particular", "Empresa", "Otro"];
@@ -203,15 +200,13 @@ export default function Workflow() {
             project_id: selectedProjectId,
             name: newUnitName,
             status: {},
-            lat: newUnitLat ? parseFloat(newUnitLat) : null,
-            lng: newUnitLng ? parseFloat(newUnitLng) : null
+            address: newUnitAddress || null
         }).select().single();
 
         if (data) {
             setHousingUnits([...housingUnits, data]); // Append to end usually
             setNewUnitName('');
-            setNewUnitLat('');
-            setNewUnitLng('');
+            setNewUnitAddress('');
             setShowAddUnit(false);
         }
     };
@@ -241,6 +236,8 @@ export default function Workflow() {
             }
         }
     };
+
+
 
     const handleUpdateProject = async () => {
         if (!editProjectName || !selectedProjectId) return;
@@ -776,31 +773,6 @@ export default function Workflow() {
                             </>
                         )}
                     </div>
-
-                    {selectedProjectId && projects.find(p => p.id === selectedProjectId)?.lat && projects.find(p => p.id === selectedProjectId)?.lng && (
-                        <div className="mt-8 border border-border rounded-lg overflow-hidden transition-all duration-300">
-                            <button 
-                                onClick={() => setShowMap(!showMap)}
-                                className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <MapIcon className="h-5 w-5 text-primary" />
-                                    <h3 className="text-lg font-bold">Ubicación del Proyecto</h3>
-                                </div>
-                                {showMap ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                            </button>
-                            
-                            {showMap && (
-                                <div className="p-4 border-t border-border animate-in slide-in-from-top-2 duration-200">
-                                    <ProjectMap 
-                                        proyectoId={selectedProjectId} 
-                                        viviendas={housingUnits} 
-                                        onViviendaMove={handleMarkerDragEnd}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </section>
             )}
 
@@ -823,13 +795,6 @@ export default function Workflow() {
                                 />
                             </div>
                             <Button size="sm" className="bg-primary text-primary-foreground font-bold whitespace-nowrap" onClick={() => {
-                                if (!showAddUnit) {
-                                    const proj = projects.find(p => p.id === selectedProjectId);
-                                    if (proj) {
-                                        setNewUnitLat(proj.lat?.toString() || '');
-                                        setNewUnitLng(proj.lng?.toString() || '');
-                                    }
-                                }
                                 setShowAddUnit(!showAddUnit);
                             }}>
                                 {showAddUnit ? 'Cancelar' : '+ Agregar Vivienda'}
@@ -838,18 +803,14 @@ export default function Workflow() {
                     </div>
 
                     {showAddUnit && (
-                        <form onSubmit={handleCreateUnit} className="bg-card border border-border p-4 rounded-lg flex gap-4 items-end animate-in zoom-in-95 flex-wrap">
+                        <form onSubmit={handleCreateUnit} className="bg-card border border-border p-4 rounded-lg flex gap-4 items-end animate-in zoom-in-95 flex-wrap w-full">
                             <div className="flex-[2] min-w-[200px]">
-                                <Label>Nombre de idenfiticación</Label>
+                                <Label>Nombre de identificación</Label>
                                 <Input value={newUnitName} onChange={e => setNewUnitName(e.target.value)} placeholder="Ej. Depto 101" autoFocus />
                             </div>
-                            <div className="flex-1 min-w-[120px]">
-                                <Label>Latitud (Opcional)</Label>
-                                <Input value={newUnitLat} onChange={e => setNewUnitLat(e.target.value)} placeholder="-33.448" type="number" step="any" />
-                            </div>
-                            <div className="flex-1 min-w-[120px]">
-                                <Label>Longitud (Opcional)</Label>
-                                <Input value={newUnitLng} onChange={e => setNewUnitLng(e.target.value)} placeholder="-70.669" type="number" step="any" />
+                            <div className="flex-[3] min-w-[300px]">
+                                <Label>Dirección (Opcional)</Label>
+                                <Input value={newUnitAddress} onChange={e => setNewUnitAddress(e.target.value)} placeholder="Ej. Avenida Providencia 1234, Santiago" />
                             </div>
                             <Button type="submit">Agregar</Button>
                         </form>

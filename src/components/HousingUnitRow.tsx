@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { HousingUnit } from '../types';
 import { Button } from './Button';
-import { MessageSquare, Image as ImageIcon, ChevronDown, ChevronUp, Save, Upload, X, Loader2, Pencil, Trash2, Check } from 'lucide-react';
+import { MessageSquare, Image as ImageIcon, ChevronDown, ChevronUp, Save, Upload, X, Loader2, Pencil, Trash2, Check, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { Label } from './Label';
@@ -27,8 +27,7 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
     const [isUploading, setIsUploading] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [editName, setEditName] = useState(unit.name);
-    const [editLat, setEditLat] = useState(unit.lat?.toString() || '');
-    const [editLng, setEditLng] = useState(unit.lng?.toString() || '');
+    const [editAddress, setEditAddress] = useState(unit.address || '');
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const toggleStatus = async (option: string) => {
@@ -140,8 +139,7 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
         try {
             const updates = { 
                 name: editName,
-                lat: editLat ? parseFloat(editLat) : null,
-                lng: editLng ? parseFloat(editLng) : null
+                address: editAddress || null
             };
             const { error } = await supabase
                 .from('housing_units')
@@ -166,43 +164,55 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
             >
                 <div className="flex-1 flex items-center gap-2">
                     {isEditingName ? (
-                        <div className="flex items-center gap-2 animate-in fade-in flex-wrap" onClick={(e) => e.stopPropagation()}>
-                            <Input
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                className="h-9 w-48"
-                                placeholder="Nombre"
-                                autoFocus
-                            />
-                            <Input
-                                value={editLat}
-                                onChange={(e) => setEditLat(e.target.value)}
-                                className="h-9 w-32"
-                                placeholder="Latitud (-33.4)"
-                                type="number" step="any"
-                            />
-                            <Input
-                                value={editLng}
-                                onChange={(e) => setEditLng(e.target.value)}
-                                className="h-9 w-32"
-                                placeholder="Longitud (-70.6)"
-                                type="number" step="any"
-                            />
-                            <Button size="sm" onClick={() => handleSaveUnit()} className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700">
-                                <Check className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => {
-                                setIsEditingName(false);
-                                setEditName(unit.name);
-                                setEditLat(unit.lat?.toString() || '');
-                                setEditLng(unit.lng?.toString() || '');
-                            }} className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
-                                <X className="h-4 w-4" />
-                            </Button>
+                        <div className="flex items-end gap-2 flex-wrap w-full animate-in fade-in" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex-1 min-w-[150px]">
+                                <Label className="text-xs text-muted-foreground">Nombre</Label>
+                                <Input
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="h-9 w-full"
+                                    placeholder="Nombre"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="flex-[2] min-w-[250px]">
+                                <Label className="text-xs text-muted-foreground">Dirección</Label>
+                                <Input
+                                    value={editAddress}
+                                    onChange={(e) => setEditAddress(e.target.value)}
+                                    className="h-9 w-full"
+                                    placeholder="Ej. Avenida Providencia 1234, Santiago"
+                                />
+                            </div>
+                            <div className="flex gap-1">
+                                <Button size="sm" onClick={() => handleSaveUnit()} className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700">
+                                    <Check className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => {
+                                    setIsEditingName(false);
+                                    setEditName(unit.name);
+                                    setEditAddress(unit.address || '');
+                                }} className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                     ) : (
                         <div className="flex items-center gap-2">
                             <h3 className="text-lg font-bold text-foreground">{unit.name}</h3>
+                            {unit.address && (
+                                <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(unit.address)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1.5 text-xs text-green-500 hover:text-green-600 transition-colors font-medium bg-green-500/10 px-2.5 py-1 rounded-full border border-green-500/20"
+                                    title="Ver en Google Maps"
+                                >
+                                    <MapPin className="h-3.5 w-3.5" />
+                                    <span>Ver Ubicación</span>
+                                </a>
+                            )}
                             <Button
                                 size="sm"
                                 variant="ghost"
