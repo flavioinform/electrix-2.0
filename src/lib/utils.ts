@@ -27,3 +27,13 @@ export const formatRut = (rut: string): string => {
 
     return `${formattedBody}-${dv}`;
 };
+
+export const getGoogleMapsUrl = (address: string | null | undefined): string => {
+    if (!address) return '';
+    const trimmed = address.trim();
+    if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed;
+    }
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`;
+};
+

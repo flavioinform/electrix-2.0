@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Client, Project, HousingUnit } from '../types';
 import { Building, FolderOpen, Home, CheckCircle2, Loader2, LogOut, MapPin } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, getGoogleMapsUrl } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/Button';
 
@@ -179,9 +179,9 @@ export default function ClientView() {
                                     <div key={unit.id} className="bg-card border border-border rounded-lg p-6">
                                         <div className="flex items-center justify-between gap-4 mb-4">
                                             <h3 className="text-lg font-bold">{unit.name}</h3>
-                                            {unit.address && (
+                                             {unit.address && (
                                                 <a
-                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(unit.address)}`}
+                                                    href={getGoogleMapsUrl(unit.address)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="inline-flex items-center gap-1.5 text-xs text-green-500 hover:text-green-600 transition-colors font-medium bg-green-500/10 px-2.5 py-1 rounded-full border border-green-500/20"

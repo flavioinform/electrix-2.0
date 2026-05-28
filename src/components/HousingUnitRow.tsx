@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { HousingUnit } from '../types';
 import { Button } from './Button';
 import { MessageSquare, Image as ImageIcon, ChevronDown, ChevronUp, Save, Upload, X, Loader2, Pencil, Trash2, Check, MapPin } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, getGoogleMapsUrl } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { Label } from './Label';
 import { Input } from './Input';
@@ -202,7 +202,7 @@ export function HousingUnitRow({ unit, onUpdate, onDelete }: HousingUnitRowProps
                             <h3 className="text-lg font-bold text-foreground">{unit.name}</h3>
                             {unit.address && (
                                 <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(unit.address)}`}
+                                    href={getGoogleMapsUrl(unit.address)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     onClick={(e) => e.stopPropagation()}
